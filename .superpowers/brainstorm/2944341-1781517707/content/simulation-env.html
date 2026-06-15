@@ -1,0 +1,26 @@
+<h2>What simulation environment are you targeting?</h2>
+<p class="subtitle">This shapes the entire stack — ROS integration, physics fidelity, and how easily you can deploy to real hardware later.</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Gazebo + ROS 2</h3>
+      <p>You already use ROS 2 in skynet-ws. Strong community support, good sensor simulation (depth, RGB, IMU), works with PX4/ArduPilot SITL. Most transferable to real hardware.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>AirSim / Microsoft AirSim (Unreal)</h3>
+      <p>Photorealistic indoor environments, excellent for vision-based tasks. Harder ROS bridge, higher GPU cost. Best for training/testing vision models.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Habitat-Sim (Meta)</h3>
+      <p>Purpose-built for embodied AI navigation research. Ships with semantically rich indoor scenes (HM3D, Gibson). Native integration with foundation model benchmarks. Less realistic physics.</p>
+    </div>
+  </div>
+</div>

@@ -204,7 +204,7 @@ This gives a clean A/B comparison: **semantic VLM planning vs geometric frontier
 ## 11. Repository Structure
 
 ```
-uav-foundation-nav/
+skymind/
 ├── ros2_ws/
 │   └── src/
 │       ├── perception/          # scene_describer, occupancy_mapper nodes

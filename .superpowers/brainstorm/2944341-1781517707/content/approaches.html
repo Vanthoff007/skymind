@@ -1,0 +1,37 @@
+<h2>Three Approaches to Foundation-Model UAV Navigation</h2>
+<p class="subtitle">All three use AirSim + PX4 + ROS 2. The difference is <em>where</em> the foundation model sits in the loop.</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>VLM-as-Planner (Recommended)</h3>
+      <p><strong>Architecture:</strong> CLIP/LLaMA-Vision receives RGB-D frame → generates a language description of the scene → LLM decides next exploration frontier in natural language → PX4 waypoint controller executes.</p>
+      <p><strong>Stack:</strong> CLIP or LLaVA for perception, GPT-4V or local LLaMA-3-Vision for planning, existing PX4 waypoint API for execution.</p>
+      <p><strong>Pro:</strong> Cleanest separation of concerns. Each component is independently testable. Very adaptable to ground-robot baselines (NavGPT, VoroNav). Strong story for master's apps.</p>
+      <p><strong>Con:</strong> API latency if using cloud VLM. Inference speed may limit real-time use.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>CLIP Embeddings + Classical Planner</h3>
+      <p><strong>Architecture:</strong> CLIP encodes each camera frame into a semantic embedding → these embeddings replace raw pixels in a classical exploration planner (frontier-based or potential field) → PX4 executes.</p>
+      <p><strong>Stack:</strong> CLIP for embeddings, custom frontier planner consuming semantic features, PX4 for control.</p>
+      <p><strong>Pro:</strong> Faster inference (no LLM in the loop). Easier to evaluate — direct comparison to classical frontier exploration. More deterministic behavior.</p>
+      <p><strong>Con:</strong> Less "foundation model" story — CLIP is doing feature extraction, not reasoning. Weaker novelty claim.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>End-to-End Visuomotor Fine-Tuning</h3>
+      <p><strong>Architecture:</strong> Fine-tune a small VLM (e.g., OpenVLA or a LLaVA variant) on UAV navigation demonstrations collected in AirSim → model outputs velocity commands directly from image + task instruction.</p>
+      <p><strong>Stack:</strong> AirSim for data collection, LoRA fine-tuning on LLaVA/OpenVLA, ROS 2 bridge to PX4.</p>
+      <p><strong>Pro:</strong> Highest novelty. Directly analogous to RT-2 for drones. Most impressive if it works.</p>
+      <p><strong>Con:</strong> Requires large demonstration dataset. Fine-tuning is expensive (GPU hours). Highest risk of not converging in project timeline. Hard to debug.</p>
+    </div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:1.5rem">My recommendation: <strong>Option A</strong> — best balance of novelty, feasibility, and timeline for a master's application project.</p>
