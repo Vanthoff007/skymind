@@ -1,7 +1,7 @@
 # Design Spec: Foundation-Model-Guided UAV Navigation
 **Date:** 2026-06-15
 **Author:** Arjav Singh
-**Target:** ETH Zurich Master's Application (November 2026)
+**Target:** Master's Application (November 2026)
 
 ---
 
