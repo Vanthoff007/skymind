@@ -1,243 +1,59 @@
-# Design Spec: Foundation-Model-Guided UAV Navigation
+# Skymind: Foundation-Model-Guided UAV Navigation
 **Date:** 2026-06-15
 **Author:** Arjav Singh
 
 ---
 
-## 1. Problem Statement
+## Problem Statement
 
-Most foundation-model-guided navigation research targets ground robots operating in 2D space. This project adapts the VLM-as-Planner paradigm to aerial robots (UAVs), introducing 3D spatial reasoning, hovering dynamics, and altitude-aware scene understanding as novel challenges. The core question: **does replacing a classical geometric frontier planner with a vision-language model improve exploration efficiency in unknown indoor environments?**
+Right now, drones explore unknown indoor spaces (rooms, corridors) using a "geometric frontier planner" — a dumb algorithm that just flies toward the nearest unexplored patch on a map, with no understanding of what's actually in the scene. It doesn't know a corridor from a closet; it just sees "explored" vs "unexplored" cells.
 
----
+The idea: replace that dumb planner with a vision-language model (VLM) — something like LLaVA or GPT-4V — that can actually *look* at the camera feed and *reason* about it ("this looks like a corridor, probably leads somewhere; that's a dead-end closet, skip it"). The hope is this semantic understanding makes exploration faster and smarter than blind geometry.
 
-## 2. Novelty Claim
+**Core question:** does giving a drone a VLM as its "brain" for deciding where to fly next actually explore an unknown indoor space better than the classic dumb geometric approach?
 
-> "We present a systematic adaptation of VLM-guided frontier exploration to UAV platforms, evaluating it against classical geometric frontier exploration across coverage efficiency, collision rate, and semantic accuracy in AirSim simulation, with a real-world deployment attempt."
-
-**Revised positioning (2026-06-16):** A literature pass surfaced close prior art, so the claim can no longer be "first VLM exploration on a UAV." Two papers in particular narrow the gap:
-
-- **Autonomous Frontier-Based Exploration with VLM Guidance** ([arXiv:2605.23165](https://arxiv.org/abs/2605.23165)) — VLM picks frontiers from occupancy map + frontier imagery on a *ground* robot, +24% coverage over geometric baselines across 6 indoor sims, with a sim-to-real attempt. Nearly identical Layer-2 design to this project, one platform removed.
-- **Efficient Navigation in Unknown Indoor Environments with VLMs** ([arXiv:2510.04991](https://arxiv.org/html/2510.04991v2)) — VLM reasons directly over occupancy-grid images (not RGB) to rank subgoals, ~10% shorter paths. Same occupancy-map-as-prompt pattern as this project's Layer 2.
-- **AirHunt** ([arXiv:2601.12742](https://arxiv.org/html/2601.12742)) and **SoraNav** ([arXiv:2510.25191](https://arxiv.org/abs/2510.25191)) — aerial + VLM, but outdoor open-set object search and instruction-following respectively, not indoor frontier-style exploration. They do establish that VLM-inference-latency-vs-control-rate mismatch (relevant to Layer 2/3 here) and geometric-fallback-on-infeasible-VLM-output (relevant to the Safety Filter) are known aerial-specific problems with existing solutions to draw from.
-
-The defensible novelty gap, given the above: **indoor, task-free frontier exploration (not goal-directed VLN, not outdoor object search) on an aerial platform**, controlled A/B against a geometric frontier baseline on the same stack. That specific combination does not appear in the surveyed work. Also comparable to ground-robot baselines NavGPT and VoroNav for the general VLM-as-planner paradigm.
+Most existing work on this idea (VLM-as-planner) has been done on ground robots. Adapting it to a drone adds new wrinkles: the drone moves in full 3D (not just along the floor), has to deal with altitude and hovering, and has tighter constraints on how fast it can react.
 
 ---
 
-## 3. System Architecture
+## Related Work (Reference Papers)
 
-Three loosely-coupled layers communicating over ROS 2 topics:
+Closest prior art — read these first, since they're nearly the same idea one platform removed (ground robot, not aerial):
 
-```
-[AirSim + PX4 SITL]
-    ↓ /camera/rgb, /camera/depth, /mavros/local_position/pose
-[Layer 1: Perception]
-    Scene Describer (LLaVA/BLIP-2)   →   natural language scene description
-    Occupancy Mapper (depth + pose)   →   2D explored/unexplored grid
-    ↓ scene_description (String), occupancy_map (OccupancyGrid)
-[Layer 2: VLM Planner]
-    LLaMA-3-Vision (local) or GPT-4V (API)
-    Input:  scene description + occupancy map + UAV pose + task goal
-    Output: next waypoint (x, y, z, yaw) + reasoning string
-    ↓ /planner/waypoint (PoseStamped)
-[Layer 3: Execution]
-    Safety Filter   →   validates waypoint against occupancy map
-    MAVROS bridge   →   PX4 OFFBOARD mode position setpoints
-    ↑ completion feedback → triggers new perception cycle
-```
+- **Autonomous Frontier-Based Exploration with VLM Guidance** — [arXiv:2605.23165](https://arxiv.org/abs/2605.23165). A VLM picks which frontier (unexplored boundary) to fly toward next, using the occupancy map + photos of each candidate direction, instead of a geometric heuristic. Ground robot, +24% map coverage over baselines, tried a real-world test too.
+- **Efficient Navigation in Unknown Indoor Environments with VLMs** — [arXiv:2510.04991](https://arxiv.org/html/2510.04991v2). VLM looks directly at the occupancy grid image (not the camera feed) to rank candidate subgoals. ~10% shorter paths than baseline.
 
-### ROS 2 Nodes
+Aerial + VLM (different specifics, but same general space):
 
-| Node | Subscribes | Publishes |
-|------|-----------|-----------|
-| `scene_describer` | `/camera/rgb` | `/perception/scene_description` |
-| `occupancy_mapper` | `/camera/depth`, `/mavros/local_position/pose` | `/perception/occupancy_map` |
-| `vlm_planner` | `/perception/scene_description`, `/perception/occupancy_map`, `/mavros/local_position/pose` | `/planner/waypoint`, `/planner/reasoning` |
-| `safety_filter` | `/planner/waypoint`, `/perception/occupancy_map` | `/execution/safe_waypoint` |
-| `waypoint_controller` | `/execution/safe_waypoint` | `/mavros/setpoint_position/local` |
+- **AirHunt** — [arXiv:2601.12742](https://arxiv.org/html/2601.12742). Drone + VLM for outdoor object search. Useful for how they solved the "VLM is slow, drone flight control needs to be fast" timing mismatch.
+- **SoraNav** — [arXiv:2510.25191](https://arxiv.org/abs/2510.25191). Drone + VLM with a geometric fallback when the VLM gives a bad/unreachable answer — relevant for building a safety check around the VLM's output.
+
+Foundational VLM-as-planner papers (ground robot, general paradigm):
+
+- **NavGPT** — [arXiv:2305.16986](https://arxiv.org/abs/2305.16986)
+- **VoroNav** — [arXiv:2309.10329](https://arxiv.org/abs/2309.10329)
 
 ---
 
-## 4. Components
+## What to Learn
 
-### 4.1 Scene Describer
-- **Model:** LLaVA-1.6 (7B, local) as primary; BLIP-2 as lightweight fallback
-- **Input:** RGB frame at ~2 Hz
-- **Output:** 1–3 sentence description focused on spatial layout and navigability
-- **Prompt template:** `"Describe this UAV camera view for navigation. Focus on: open spaces, obstacles, doors, corridors, unexplored areas. Be concise."`
-- **Implementation:** Python ROS 2 node wrapping `ollama` or `transformers` inference
+**Robotics / ROS 2**
+- [ROS 2 Humble Tutorials](https://docs.ros.org/en/humble/Tutorials.html) — nodes, topics, how packages talk to each other
+- [cv_bridge tutorial](https://wiki.ros.org/cv_bridge/Tutorials/ConvertingBetweenROSImagesAndOpenCVImagesPython) — converting camera images between ROS and OpenCV
+- [MAVROS OFFBOARD mode tutorial](https://docs.px4.io/main/en/ros/mavros_offboard_python.html) — how to actually send the drone a "fly here" command
 
-### 4.2 Occupancy Mapper
-- **Input:** Depth image + drone pose (from MAVROS)
-- **Output:** 2D top-down occupancy grid (explored / unexplored / obstacle)
-- **Implementation:** Project depth pointcloud to 2D grid; mark cells as explored when drone passes within 1.5m; obstacles from depth thresholding
-- **Library:** `octomap_server` or custom numpy grid
+**Simulation**
+- [AirSim ROS2 wrapper](https://github.com/microsoft/AirSim/blob/main/docs/ros2.md) — connecting the simulator to ROS 2
+- [PX4 safety configuration](https://docs.px4.io/main/en/config/safety.html) — flight controller safety limits
 
-### 4.3 VLM Planner
-- **Model:** LLaMA-3.2-Vision-Instruct (11B) locally via `ollama`; GPT-4V via API as fallback
-- **Prompt structure:** Few-shot chain-of-thought with 3 examples of good exploration decisions
-- **Output parsing:** Extract `(x, y, z, yaw)` from structured JSON in model output; retry once on parse failure; fall back to hover on second failure
-- **Planning frequency:** Once per waypoint completion (event-driven, not fixed-rate)
+**Mapping**
+- [sensor_msgs/PointCloud2 with Open3D](https://github.com/isl-org/Open3D-ROS) — turning depth images into 3D points
+- [OctoMap ROS](https://octomap.github.io/) — standard library for building an occupancy map (explored/unexplored/obstacle grid)
 
-### 4.4 Safety Filter
-- **Checks:** (1) waypoint within arena bounds, (2) path to waypoint collision-free in occupancy map, (3) altitude within [0.5m, 3.0m]
-- **On rejection:** request new waypoint from planner with rejection reason in context
-- **Max retries:** 3 before falling back to hover-in-place
+**VLM / LLM side**
+- [Ollama quickstart](https://ollama.com/library/llava) — running a vision model like LLaVA locally, one command
+- [Prompt engineering guide (Anthropic)](https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/overview) — getting structured, reliable output out of a model (you'll need this to get clean waypoints back instead of rambling text)
 
-### 4.5 Waypoint Controller
-- **Interface:** MAVROS `/mavros/setpoint_position/local` in OFFBOARD mode
-- **Speed limit:** 0.5 m/s in simulation, 0.3 m/s in real-world
-- **Completion criterion:** position error < 0.2m AND yaw error < 5°
-- **Reuse:** Directly extends existing PX4 controller from `skynet-ws`
-
----
-
-## 5. Simulation Environment
-
-- **Simulator:** AirSim (Unreal Engine) — already set up in SITL project
-- **Scene:** Indoor warehouse or hospital map with corridors, rooms, doors
-- **Flight controller:** PX4 SITL via Docker (existing setup)
-- **ROS bridge:** MAVROS (existing in skynet-ws)
-- **Arena size:** ~20m × 20m × 3m (indoor scale)
-
----
-
-## 6. Baseline
-
-Classical frontier exploration (geometric only):
-- Same hardware stack and ROS 2 nodes
-- Layer 2 (VLM Planner) replaced with standard frontier-based planner
-- Frontier = centroid of nearest unexplored boundary cell in occupancy grid
-- No semantic reasoning — purely geometric
-
-This gives a clean A/B comparison: **semantic VLM planning vs geometric frontier planning**, same everything else.
-
----
-
-## 7. Evaluation
-
-### Metrics
-| Metric | Definition |
-|--------|-----------|
-| Coverage % | Fraction of navigable area explored after N minutes |
-| Time-to-X% | Time to reach 50%, 75%, 90% coverage |
-| Collision rate | Collisions per trial (lower is better) |
-| Planner failures | Times safety filter rejected all retries |
-| Semantic accuracy | Human-rated: does the VLM description match the scene? (1–5 scale, 20 samples) |
-
-### Experimental Protocol
-- 20 trials per condition (VLM planner, frontier baseline, random walk)
-- 3 different indoor maps to test generalization
-- Time limit: 10 minutes per trial
-- Metrics logged to rosbag + CSV; plotted with matplotlib/seaborn
-
-### Ablations
-- Local LLM (LLaMA-3.2) vs API (GPT-4V)
-- With scene description vs without (waypoint only from map)
-- Prompt variants: zero-shot vs few-shot chain-of-thought
-
----
-
-## 8. Real-World Deployment (Phase 5, Optional)
-
-- **Hardware:** Existing drone from skynet-ws project
-- **Sensor swap:** Replace AirSim camera topics with real RealSense D435 topics (same ROS 2 interface)
-- **Safety:** Reduced speed (0.3 m/s), manual override always armed, indoor controlled space
-- **Goal:** At least one successful full-room exploration run
-- **Fallback:** If hardware unavailable, document sim-to-real gap analysis from literature
-
----
-
-## 9. Timeline
-
-| Phase | Dates | Deliverable |
-|-------|-------|-------------|
-| 1. Setup | Jun 15 – Jul 6 | AirSim scene + VLM inference working |
-| 2. Perception | Jul 7 – Jul 27 | Scene describer + occupancy mapper nodes |
-| 3. Planning | Jul 28 – Aug 24 | Full closed loop + baseline |
-| 4. Evaluation | Aug 25 – Sep 21 | Results, plots, failure analysis |
-| 5. Real-world | Sep 22 – Oct 19 | Real flight attempt (optional) |
-| 6. Write-up | Oct 20 – Nov 2 | GitHub + demo video + technical report |
-
----
-
-## 10. Knowledge Requirements & Resources
-
-### Phase 1
-**What to know:** ROS 2 nodes, topics, launch files; running inference with HuggingFace/ollama
-**Resources:**
-- [ROS 2 Humble Tutorials](https://docs.ros.org/en/humble/Tutorials.html) — nodes, topics, colcon build
-- [Ollama quickstart](https://ollama.com/library/llava) — run LLaVA locally in one command
-- [AirSim ROS2 wrapper](https://github.com/microsoft/AirSim/blob/main/docs/ros2.md)
-
-### Phase 2
-**What to know:** ROS 2 image processing (`cv_bridge`, `sensor_msgs`); pointcloud basics; numpy grid operations
-**Resources:**
-- [cv_bridge tutorial](https://wiki.ros.org/cv_bridge/Tutorials/ConvertingBetweenROSImagesAndOpenCVImagesPython)
-- [sensor_msgs/PointCloud2 with Open3D](https://github.com/isl-org/Open3D-ROS) — depth → pointcloud
-- [OctoMap ROS](https://octomap.github.io/) — 3D occupancy mapping
-
-### Phase 3
-**What to know:** Prompt engineering for structured output; JSON parsing from LLM responses; MAVROS OFFBOARD mode
-**Resources:**
-- [Prompt engineering guide (Anthropic)](https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/overview) — chain-of-thought, structured output
-- [MAVROS OFFBOARD mode tutorial](https://docs.px4.io/main/en/ros/mavros_offboard_python.html)
-- [NavGPT paper](https://arxiv.org/abs/2305.16986) — ground-robot VLM planner to adapt from
-- [VoroNav paper](https://arxiv.org/abs/2309.10329) — semantic frontier exploration baseline
-- [Autonomous Frontier-Based Exploration with VLM Guidance](https://arxiv.org/abs/2605.23165) — closest prior art: VLM frontier selection on ground robot, must differentiate against in related work
-- [Efficient Navigation in Unknown Indoor Environments with VLMs](https://arxiv.org/html/2510.04991v2) — occupancy-grid-as-prompt pattern, same as this project's Layer 2
-- [AirHunt](https://arxiv.org/html/2601.12742) — aerial VLM/planning frequency mismatch, relevant to Layer 2/3 latency design
-- [SoraNav](https://arxiv.org/abs/2510.25191) — aerial VLM with geometric fallback on infeasible output, relevant to Safety Filter design
-
-### Phase 4
-**What to know:** Experimental design; matplotlib/seaborn plotting; statistical significance (t-test)
-**Resources:**
+**Evaluation**
 - [Matplotlib tutorials](https://matplotlib.org/stable/tutorials/index.html)
-- [scipy.stats.ttest_ind](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ttest_ind.html) — compare means between conditions
-- [How to write a robotics evaluation section](https://arxiv.org/abs/2304.01196) — CoNAV as example
-
-### Phase 5
-**What to know:** Sim-to-real transfer; RealSense D435 ROS 2 driver; safety considerations for real flight
-**Resources:**
-- [Intel RealSense ROS2 wrapper](https://github.com/IntelRealSense/realsense-ros)
-- [PX4 safety configuration](https://docs.px4.io/main/en/config/safety.html)
-
-### Phase 6
-**What to know:** LaTeX (IROS/NeurIPS template); how to structure a technical report
-**Resources:**
-- [IROS 2026 paper template](https://www.iros25.org/call-for-papers) — standard robotics venue format
-- [How to write a research paper (Whitesides)](https://intra.ece.ucr.edu/~rlake/Whitesides_writing_res_paper.pdf)
-
----
-
-## 11. Repository Structure
-
-```
-skymind/
-├── ros2_ws/
-│   └── src/
-│       ├── perception/          # scene_describer, occupancy_mapper nodes
-│       ├── planning/            # vlm_planner, safety_filter nodes
-│       ├── execution/           # waypoint_controller node
-│       └── evaluation/          # metrics logging, trial runner
-├── scripts/
-│   ├── run_simulation.sh        # launch AirSim + PX4 + ROS 2 stack
-│   ├── run_baseline.sh          # same but with frontier planner
-│   └── run_eval.sh              # batch trial runner
-├── config/
-│   ├── prompts/                 # VLM prompt templates (YAML)
-│   └── params/                  # node parameters (YAML)
-├── evaluation/
-│   ├── results/                 # trial CSVs
-│   └── plots/                   # generated figures
-├── docs/
-│   └── superpowers/specs/       # this file
-└── README.md
-```
-
----
-
-## 12. Resume / SOP Bullet
-
-> **Foundation-Model-Guided UAV Exploration** *(Jun–Nov 2026)*
-> Adapted VLM-as-Planner navigation (NavGPT/VoroNav paradigm) to aerial robots. Built a 3-layer ROS 2 system integrating LLaVA scene understanding with PX4 flight control in AirSim simulation. Showed X% improvement in coverage efficiency over classical frontier exploration across 20 trials on 3 indoor maps. Deployed to real hardware with RealSense D435 sensing.
+- [scipy.stats.ttest_ind](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ttest_ind.html) — checking if your VLM result is actually better than the baseline, statistically, not just by luck
