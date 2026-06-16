@@ -13,9 +13,15 @@ Most foundation-model-guided navigation research targets ground robots operating
 
 ## 2. Novelty Claim
 
-> "We present the first systematic adaptation of VLM-based semantic exploration to UAV platforms, evaluating it against classical frontier exploration across coverage efficiency, collision rate, and semantic accuracy in AirSim simulation, with a real-world deployment attempt."
+> "We present a systematic adaptation of VLM-guided frontier exploration to UAV platforms, evaluating it against classical geometric frontier exploration across coverage efficiency, collision rate, and semantic accuracy in AirSim simulation, with a real-world deployment attempt."
 
-This is directly comparable to ground-robot baselines (NavGPT, VoroNav) while introducing aerial-specific challenges that prior work has not addressed.
+**Revised positioning (2026-06-16):** A literature pass surfaced close prior art, so the claim can no longer be "first VLM exploration on a UAV." Two papers in particular narrow the gap:
+
+- **Autonomous Frontier-Based Exploration with VLM Guidance** ([arXiv:2605.23165](https://arxiv.org/abs/2605.23165)) — VLM picks frontiers from occupancy map + frontier imagery on a *ground* robot, +24% coverage over geometric baselines across 6 indoor sims, with a sim-to-real attempt. Nearly identical Layer-2 design to this project, one platform removed.
+- **Efficient Navigation in Unknown Indoor Environments with VLMs** ([arXiv:2510.04991](https://arxiv.org/html/2510.04991v2)) — VLM reasons directly over occupancy-grid images (not RGB) to rank subgoals, ~10% shorter paths. Same occupancy-map-as-prompt pattern as this project's Layer 2.
+- **AirHunt** ([arXiv:2601.12742](https://arxiv.org/html/2601.12742)) and **SoraNav** ([arXiv:2510.25191](https://arxiv.org/abs/2510.25191)) — aerial + VLM, but outdoor open-set object search and instruction-following respectively, not indoor frontier-style exploration. They do establish that VLM-inference-latency-vs-control-rate mismatch (relevant to Layer 2/3 here) and geometric-fallback-on-infeasible-VLM-output (relevant to the Safety Filter) are known aerial-specific problems with existing solutions to draw from.
+
+The defensible novelty gap, given the above: **indoor, task-free frontier exploration (not goal-directed VLN, not outdoor object search) on an aerial platform**, controlled A/B against a geometric frontier baseline on the same stack. That specific combination does not appear in the surveyed work. Also comparable to ground-robot baselines NavGPT and VoroNav for the general VLM-as-planner paradigm.
 
 ---
 
@@ -179,6 +185,10 @@ This gives a clean A/B comparison: **semantic VLM planning vs geometric frontier
 - [MAVROS OFFBOARD mode tutorial](https://docs.px4.io/main/en/ros/mavros_offboard_python.html)
 - [NavGPT paper](https://arxiv.org/abs/2305.16986) — ground-robot VLM planner to adapt from
 - [VoroNav paper](https://arxiv.org/abs/2309.10329) — semantic frontier exploration baseline
+- [Autonomous Frontier-Based Exploration with VLM Guidance](https://arxiv.org/abs/2605.23165) — closest prior art: VLM frontier selection on ground robot, must differentiate against in related work
+- [Efficient Navigation in Unknown Indoor Environments with VLMs](https://arxiv.org/html/2510.04991v2) — occupancy-grid-as-prompt pattern, same as this project's Layer 2
+- [AirHunt](https://arxiv.org/html/2601.12742) — aerial VLM/planning frequency mismatch, relevant to Layer 2/3 latency design
+- [SoraNav](https://arxiv.org/abs/2510.25191) — aerial VLM with geometric fallback on infeasible output, relevant to Safety Filter design
 
 ### Phase 4
 **What to know:** Experimental design; matplotlib/seaborn plotting; statistical significance (t-test)
