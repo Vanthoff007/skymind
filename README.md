@@ -2,16 +2,14 @@
 
 Foundation-model-guided UAV exploration. Replaces a classical geometric frontier planner with a vision-language model (VLM) to study whether semantic reasoning improves exploration efficiency in unknown indoor environments, evaluated against a frontier-exploration baseline in AirSim.
 
-Built for a Master's application (November 2026).
-
 ## Status
 
 Design and planning stage — implementation has not started yet.
 
 ## Documentation
 
-- [Design Spec](docs/superpowers/specs/2026-06-15-skymind-design.md) — architecture, components, evaluation protocol, novelty positioning, and related work
-- [Implementation Plan](docs/superpowers/plans/2026-06-15-skymind.md) — phased task breakdown
+- [Design Spec](docs/specs/2026-06-15-skymind-design.md) — architecture, components, evaluation protocol, novelty positioning, and related work
+- [Implementation Plan](docs/plans/2026-06-15-skymind.md) — phased task breakdown
 
 ## Approach
 

@@ -1,7 +1,6 @@
 # Design Spec: Foundation-Model-Guided UAV Navigation
 **Date:** 2026-06-15
 **Author:** Arjav Singh
-**Target:** Master's Application (November 2026)
 
 ---
 
